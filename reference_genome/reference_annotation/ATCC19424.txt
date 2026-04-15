@@ -1,0 +1,8 @@
+organism: Neisseria gonorrhoeae strain 
+contigs: 2
+bases: 2230139
+CDS: 2229
+misc_RNA: 20
+rRNA: 12
+tRNA: 56
+tmRNA: 1

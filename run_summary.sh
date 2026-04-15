@@ -1,0 +1,1 @@
+snakemake -s gwas_snakefile -n --cores 92 --rerun-triggers mtime --summary > pipeline_summary.txt

@@ -1,0 +1,530 @@
+# =============================
+# IMPORTING LIBRARIES
+# =============================
+import pandas as pd
+import os
+
+# =============================
+# CONFIGURATION AND PARSING
+# =============================
+
+configfile: "config.yaml" # Load the configuration file
+
+ref_genome = config["ref_fasta"]  # Path to the reference genome
+ref_gff = config["ref_gff"]
+phen_table = config["phen_table"]  # Path to the samples table
+max_threads = config["max_threads"] ## WRAPPER
+
+# PARSING THE PHENOTYPES TABLE
+
+try:
+    # READ ONLY THE HEADER TO GET ANTIBIOTICS NAMES
+    df_head = pd.read_csv(phen_table, nrows=0, sep="\t")
+    id_column = df_head.columns[0] # Get the name of the column - Assuming column 0 is genome IDs
+    antibiotics_col = df_head.columns[1:].tolist() # Get all antibiotics names
+
+    # READ GENOME IDs (COLUMN 0)
+    df_ids = pd.read_csv(phen_table, usecols=[0], sep="\t")
+    genome_ids = df_ids[id_column].astype(str).tolist() # List of all genome IDs
+
+    ##### TODO
+    ##### HANDLE THIS WITH WRAPPER
+    # REMOVE ANTIBIOTICS WITHOUT RESISTANT PHENOTYPE (AVOID ERRORS)
+    antibiotics_remove = ["gentamicin", "cefoxitin", "spectinomycin"]
+    antibiotics = [antibiotic for antibiotic in antibiotics_col if antibiotic not in antibiotics_remove]
+
+except FileNotFoundError:
+    print(f"Error: Phenotype table file '{phen_table}' not found.")
+    print(f"Wildcards cannot be determined")
+    antibiotics = []
+    genome_ids = []
+
+# =============================
+# TARGETS RULES
+# =============================
+rule all:
+    input:
+        # -- PHYLOGENY --
+        expand(f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf", gid=genome_ids), # GENOME FILES
+        f"{config["gwas_snippy"]}/core.full.aln", # CORE GENOME ALIGNMENT
+        f"{config["gwas_snippy"]}/core.vcf.gz", # CORE GENOME SNPS
+        f"{config["gwas_tree"]}/core_genome.treefile", # PHYLOGENETIC TREE
+        f"{config["gwas_tree"]}/kinship_matrix", # KINSHIP MATRIX
+        # -- UNITIG GWAS --
+        f"{config["gwas_unitig"]}/unitigs.pyseer.gz",
+        expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig.tsv", antibiotic=antibiotics),
+        # -- GENES GWAS --
+        f"{config["gwas_data"]}/roary/gene_presence_absence.Rtab",
+        expand(f"{config["gwas_pyseer"]}/genes_results/{{antibiotic}}_gene.tsv", antibiotic=antibiotics),
+        # -- SNPs GWAS --
+        expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp.tsv", antibiotic=antibiotics),
+
+        # -- POST PROCESSING --
+        expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig_significant.tsv", antibiotic=antibiotics),
+        expand(f"{config["gwas_pyseer"]}/genes_results/{{antibiotic}}_gene_significant.tsv", antibiotic=antibiotics),
+        expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp_significant.tsv", antibiotic=antibiotics),
+        expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_annotated_genes.tsv", antibiotic=antibiotics),
+
+        # -- PLOTS -- 
+        expand(f"{config["gwas_pyseer"]}/{{type}}s_results/{{antibiotic}}_{{type}}_qqplot.png", antibiotic=antibiotics, type=['unitig', 'gene', 'snp']),
+        expand(f"{config['gwas_pyseer']}/unitigs_results/{{antibiotic}}_effect_bubble.png", antibiotic=antibiotics),
+        expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_phandango_snp.plot", antibiotic=antibiotics),
+
+        # -- SUMMARY --
+        expand(f"{config["gwas_pyseer"]}/summary/{{antibiotic}}_gwas_summary.tsv", antibiotic=antibiotics),
+
+# =============================
+# PART 1 : PRE-PROCESSING DATA
+# =============================
+# A. CLEAR PHENOTYPES TABLE AND SPLIT PER ANTIBIOTIC
+rule extract_phenotypes:
+    input:
+        table = phen_table
+    output:
+        pheno = f"{config["gwas_data"]}/phenotypes/{{antibiotic}}.tsv",
+        samples = f"{config["gwas_data"]}/samples/{{antibiotic}}_sample_list.txt"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.table, sep="\t") # Load the phenotype table
+        id_col_name = df.columns[0] # Get the name of the first column
+        target_col = wildcards.antibiotic # Antibiotic name
+
+        # Select the ID column and the current antibiotic
+        subset = df[[id_col_name, target_col]].copy()
+
+        #Filter: Keep only 0 and 1 values
+        subset = subset[subset[target_col].isin([0, 1])]
+
+        # Save phenotype file for Pyseer (TSV)
+        # We keep the header so Pyseer knows which column is the ID and which is the phenotype
+        subset.to_csv(output.pheno, sep="\t", index=False, header=True)
+
+        #Save a list of valid sample IDs
+        subset[id_col_name].to_csv(output.samples, index=False, header=False)
+# ============================================================
+# B. CREATE A LIST OF FILE PATHS FOR UNITIG-CALLER
+rule generate_fasta_list:
+    input:#Using the .fna from the Prokka files
+        fastas = expand(f"{config["prokka_out"]}/{{gid}}/{{gid}}.fna", gid=genome_ids)
+    output:
+        list_file = f"{config["gwas_data"]}/fasta_list.txt"
+    run:
+        with open(output.list_file, "w") as outfile:
+            for fasta_path in input.fastas:
+                outfile.write(f"{fasta_path}\n")
+# =============================================
+# PART 2 : PHYLOGENY ANALISYS
+# =============================================
+# A. RUN SNIPPY WITH REFERENCE GENOME
+rule run_snippy:
+    input:
+        ref = ref_genome,
+        contigs = f"{config["prokka_out"]}/{{gid}}/{{gid}}.fna"
+    output:
+        vcf = f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf"
+    params:
+        out_dir = f"{config["gwas_snippy"]}/data/{{gid}}"
+    threads: max_threads
+    conda: config["conda_snippy"]
+    shell:
+        """
+        snippy \
+        --force \
+        --cpus {threads} \
+        --outdir {params.out_dir} \
+        --ref {input.ref} \
+        --ctgs {input.contigs};
+        """
+# ============================================================
+# B. RUN SNIPPY-CORE TO GET THE CORE GENOME ALIGNMENT AND VCF
+rule run_snippy_core:
+    input:
+        ref = ref_genome,
+        vcfs = expand(f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf", gid=genome_ids)
+    output:
+        aln = f"{config["gwas_snippy"]}/core.full.aln",
+        vcf = f"{config["gwas_snippy"]}/core.vcf.gz"
+    params:
+        dirs = expand(f"{config['gwas_snippy']}/data/{{gid}}", gid=genome_ids),
+        snippy_dir = f"{config['gwas_snippy']}"
+    conda: config["conda_snippy"]
+    shell:
+        """
+        snippy-core \
+        --prefix core \
+        --ref {input.ref} \
+        {params.dirs} &&
+        bgzip -c core.vcf > {output.vcf} && # Use BGZF (format read by snippy) to compress file
+        mv -v core.* "{params.snippy_dir}/"
+        """
+# ============================================================
+#C. RUN FASTTREE TO GET A PHYLOGENETIC TREE FROM THE CORE GENOME ALIGNMENT
+rule fasttree:
+    input:
+        aln = f"{config["gwas_snippy"]}/core.full.aln",
+    output:
+        tree = f"{config["gwas_tree"]}/core_genome.treefile",
+    conda:
+        config['conda_fasttree']
+    shell:
+        '''
+        fasttree \
+        -nt \
+        -gtr \
+        {input} > {output};
+        '''
+# ============================================================
+# D. USE TREE TO CALCULATE KINSHIP MATRIX FOR GWAS
+# THIS STEP USE PYSEER OWN SCRIPT "phylogeny_distance.py" RECOMENDED BY THEIR GUIDE
+rule calculate_tree_kinship:
+    input:
+        tree = f"{config["gwas_tree"]}/core_genome.treefile"
+    output:
+        kinship = f"{config["gwas_tree"]}/kinship_matrix"
+    params:
+        script = config["pyseer_phylogeny"]
+    conda: config["conda_pyseer"]
+    shell:
+        """
+        {params.script} \
+        --lmm \
+        {input.tree} > {output.kinship};
+        """
+# =============================================
+# PART 3 : GWAS - UNITIG
+# =============================================
+# A. CALL UNITIGS WITH UNITIG-CALLER
+rule call_unitigs:
+    input:
+        fasta_list = f"{config["gwas_data"]}/fasta_list.txt",
+        fastas = expand(f"{config["prokka_out"]}/{{gid}}/{{gid}}.fna", gid=genome_ids),
+    output:
+        unitigs = f"{config["gwas_unitig"]}/unitigs.pyseer.gz",
+    params:
+        out_dir = f"{config["gwas_unitig"]}/unitigs",
+    threads: max_threads
+    conda: config["conda_unitig"]
+    shell:
+        """
+        unitig-caller \
+        --call \
+        --reads {input.fasta_list} \
+        --out {params.out_dir} \
+        --threads {threads} \
+        --pyseer &&
+        # Pyseer uses a compressed unitigs file, so we compress it here
+        if [ -f {params.out_dir}.pyseer ]; then
+            gzip -cv {params.out_dir}.pyseer > {output.unitigs};
+            rm -v {params.out_dir}.pyseer
+        fi
+        """
+# ============================================================
+# B. RUN PYSEER WITH UNITIG DATA
+rule run_pyseer_unitigs:
+    input:
+        unitigs = f"{config["gwas_unitig"]}/unitigs.pyseer.gz",
+        pheno = f"{config["gwas_data"]}/phenotypes/{{antibiotic}}.tsv",
+        kinship = f"{config["gwas_tree"]}/kinship_matrix"
+    output:
+        results = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig.tsv",
+        patterns = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}.patterns"
+    params:
+        pattern = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}",
+        out_dir = f"{config["gwas_pyseer"]}/unitigs_results/"
+    threads: max_threads
+    conda: 
+        config["conda_pyseer"]
+    shell:
+        """
+        mkdir -p {params.out_dir};
+        pyseer \
+        --lmm \
+        --phenotypes {input.pheno} \
+        --kmers {input.unitigs} \
+        --similarity {input.kinship} \
+        --output-patterns {params.pattern}.patterns \
+        --min-af 0.01 \
+        --max-af 0.99 \
+        --cpu {threads} > {output.results};
+        """
+# =============================================
+# PART 4 : GWAS - GENES
+# =============================================
+# A. GENERATING A GENE MATRIX WITH ROARY
+rule run_roary:
+    input:
+        gffs = expand(f"{config["prokka_out"]}/{{gid}}/{{gid}}.gff", gid=genome_ids)
+    output:
+        matrix = f"{config["gwas_data"]}/roary/gene_presence_absence.Rtab",
+        csv = f"{config["gwas_data"]}/roary/gene_presence_absence.csv"
+    params:
+        temp_dir = f"{config["gwas_data"]}/roary_temp",
+        out_dir = f"{config["gwas_data"]}/roary",
+    threads: max_threads
+    conda:
+        config["conda_roary"]
+    shell:
+        """
+        roary \
+        -f {params.temp_dir} \
+        -e \
+        --mafft \
+        -p {threads} \
+        -v \
+        {input.gffs} &&
+        #WORKAROUND SINCE ROARY HAS A DIRECTORY INCOMPATIBILITY WITH SNAKEMAKE
+        mv "{params.temp_dir}/*" "{params.out_dir}/" &&
+        rm -rfv {params.temp_dir}
+        """
+# ============================================================
+# B. RUN PYSEER WITH GENE PRESENCE/ABSENCE DATA
+rule run_pyseer_genes:
+    input:
+        pheno = f"{config["gwas_data"]}/phenotypes/{{antibiotic}}.tsv",
+        pres = f"{config["gwas_data"]}/roary/gene_presence_absence.Rtab",
+        kinship = f"{config["gwas_tree"]}/kinship_matrix"
+    output:
+        results = f"{config["gwas_pyseer"]}/genes_results/{{antibiotic}}_gene.tsv",
+    threads: max_threads
+    conda: 
+        config["conda_pyseer"]
+    shell:
+        """
+        pyseer \
+        --lmm \
+        --phenotypes {input.pheno} \
+        --pres {input.pres} \
+        --similarity {input.kinship} \
+        --min-af 0.01 \
+        --max-af 0.99 \
+        --cpu {threads} > {output.results};
+        """
+        # Min-af ignores genes that appear in less than 1% of samples (avoid errors)
+        # Max-af ignores genes that appear in more than 99% of samples
+        # Genes present in both R and S phenotypes aren't significant
+# =============================================
+# PART 5 : GWAS - SNPs
+# =============================================
+# A. RUN PYSEER WITH SNP DATA
+rule run_pyseer_snps:
+    input:
+        pheno = f"{config["gwas_data"]}/phenotypes/{{antibiotic}}.tsv",
+        snps = f"{config["gwas_snippy"]}/core.vcf.gz",
+        kinship = f"{config["gwas_tree"]}/kinship_matrix",
+    output:
+        results = f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp.tsv",
+    threads: max_threads
+    conda: 
+        config["conda_pyseer"]
+    shell:
+        """
+        pyseer \
+        --lmm \
+        --phenotypes {input.pheno} \
+        --vcf {input.snps} \
+        --similarity {input.kinship} \
+        --min-af 0.01 \
+        --max-af 0.99 \
+        --cpu {threads} > {output.results};
+        """
+# =============================================
+# PART 6 : GWAS POST-PROCESSING & FILTERING
+# =============================================
+# A. FILTER SIGNIFICANT HITS
+rule filter_significant_hits:
+    input:
+        results = f"{config["gwas_pyseer"]}/{{folder}}/{{antibiotic}}_{{type}}.tsv",
+        patterns = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}.patterns"
+    output:
+        significant = f"{config["gwas_pyseer"]}/{{folder}}/{{antibiotic}}_{{type}}_significant.tsv"
+    params:
+        script = config["pyseer_patterns"]
+    conda:
+        config["conda_pyseer"]
+    script:
+        config["gwas_filter_hits"]
+# ============================================================
+# B. GENERATE QQPLOT
+rule plot_qq:
+    input:
+        results = f"{config["gwas_pyseer"]}/{{folder}}/{{antibiotic}}_{{type}}.tsv"
+    output:
+        plot = f"{config["gwas_pyseer"]}/{{folder}}/{{antibiotic}}_{{type}}_qqplot.png"
+    params:
+        script = config["pyseer_qqplot"]
+    conda:
+        config["conda_pyseer"]
+    shell:
+        """
+        python {params.script} {input.results} --output {output.plot} \
+        || {{
+            echo "Error, could not generate QQPlot for {input.results}"
+            touch {output.plot}
+            }};
+        """
+# =============================================
+# PART 7 : MAPPING SIGNIFICANT GENES
+# =============================================
+# A. EXTRACT SIGNIFICANT UNITIGS SEQUENCES
+rule extract_sig_unitigs_fasta:
+    input:
+        significant  = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig_significant.tsv"
+    output:
+        fasta = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_sig_unitigs.fasta"
+    run:
+        import pandas as pd
+
+        df = pd.read_csv(input.significant, sep="\t")
+        # Variant column contain sequences
+        if "variant" in df.columns and not df.empty:
+            with open(output.fasta, "w") as f:
+                for idx, row in df.iterrows():
+                    # Use a short, SAM-safe ID based on the dataframe index
+                    f.write(f">unitig_{idx}\n{row['variant']}\n")
+        else:
+            open(output.fasta, "a").close() # Opens and closes a blank file to not fail the rule
+# ============================================================
+# B. INDEXING THE SEQUENCES POSITION
+rule bwa_index_ref:
+    input:
+        ref = ref_genome
+    output:
+        idx = f"{ref_genome}.bwt"
+    conda:
+        config["conda_pyseer"]
+    shell:
+        """
+        bwa index {input.ref}
+        """
+# ============================================================
+# C. ALIGN SEQUENCES TO REFERENCE
+rule map_unitigs_to_ref:
+    input:
+        fasta = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_sig_unitigs.fasta",
+        ref = ref_genome,
+        # bwa me uses indexing file in ref_genome directory
+        idx = f"{ref_genome}.bwt"
+    output:
+        bam = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_mapped_unitigs.bam"
+    conda:
+        config["conda_pyseer"]
+    threads: max_threads
+    shell:
+        """
+        # Check for empty file
+        if [ ! -s {input.fasta} ]; then
+            touch {output.bam}
+        else
+            bwa mem -t {threads} {input.ref} {input.fasta} | \
+            samtools view -Sb - | samtools sort -o {output.bam} -
+        fi
+        """
+# ============================================================
+# D. ANNOTATE SIGNIFICANT UNITIGS
+rule annotate_mapped_unitigs:
+    input:
+        bam = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_mapped_unitigs.bam",
+        gff = ref_gff 
+    output: 
+        annotated = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_annotated_genes.tsv"
+    conda: 
+        config["conda_pyseer"] 
+    shell:
+        """
+        # Check if BAM file actually has contents 
+        if [ -s {input.bam} ]; then
+
+            # Safely count only the mapped reads (-F 4 ignores unmapped reads)
+            mapped_count=$(samtools view -c -F 4 {input.bam})
+            
+            # If the count is greater than 0, proceed with annotation
+            if [ "$mapped_count" -gt 0 ]; then
+                sed '/^##FASTA/,$d' {input.gff} | bedtools intersect -a stdin -b {input.bam} -wa -wb > {output.annotated}
+            else
+                touch {output.annotated} 
+            fi
+        else
+            # If BAM file was 0 bytes
+            touch {output.annotated}
+        fi
+        """
+# ============================================================
+# E. EXTRACT SNPS POSITIONS
+rule extract_sig_snps_bed:
+    input:
+        significant = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_snp_significant.tsv"
+    output:
+        bed = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_sig_snps.bed"
+    run:
+        import pandas as pd
+        df = pd.read_csv(input.significant, sep="\t")
+        if "variant" in df.columns and not df.empty: # Ensures columns and not empty df
+            with open(output.bed, "w") as f:
+                for var in df["variant"]:
+                    parts = str(var).rsplit("_", 3)
+                    if len(parts) == 4:
+                        chrom, pos_str = parts[0], parts[1] # Gets chrom and position
+                        try:
+                            pos = int(pos_str) # pos need to be a int to be used to locate the gene
+                            f.write(f"{chrom}\t{pos-1}\t{pos}\t{var}\n")
+                        except ValueError as e: # If str cannot be parsed to int
+                            print(e)
+                            pass
+        else:
+            open(output.bed, "a").close() # Writes empty file
+
+# F. ANNOTATE SNPS POSITIONS TO GENES
+rule annotate_mapped_snps:
+    input:
+        bed = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_sig_snps.bed",
+        gff = ref_gff
+    output:
+        annotated = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_annotated_snps.tsv"
+    conda:
+        config["conda_pyseer"]
+    shell:
+        """
+        if [ -s {input.bed} ]; then
+            sed '/^##FASTA/,$d' {input.gff} | bedtools intersect -a stdin -b {input.bed} -wa -wb > {output.annotated}
+        else
+            touch {output.annotated}
+        fi
+        """
+# ============================================================
+# PART 8 : SUMMARY TSV WITH BEDTOOLS ANNOTATIONS
+# ============================================================
+rule summarize_gwas_results_tsv:
+    input:
+        genes = f"{config['gwas_pyseer']}/genes_results/{{antibiotic}}_gene_significant.tsv",
+        snps = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_snp_significant.tsv",
+        unitigs = f"{config['gwas_pyseer']}/unitigs_results/{{antibiotic}}_unitig_significant.tsv",
+        annotated_unitigs = f"{config['gwas_pyseer']}/unitigs_results/{{antibiotic}}_annotated_genes.tsv",
+        annotated_snps = f"{config['gwas_pyseer']}/snps_results/{{antibiotic}}_annotated_snps.tsv",
+        roary = f"{config["gwas_data"]}/roary/gene_presence_absence.csv"
+    output:
+        summary_tsv = f"{config["gwas_pyseer"]}/summary/{{antibiotic}}_gwas_summary.tsv"
+    script:
+        config["gwas_summarize"]
+
+# =============================================
+# PART 9. GENERATING PLOTS
+# =============================================
+# A. PLOT UNITIG EFFECT SIZES PER GENE
+rule plot_unitig_effect_bubble:
+    input:
+        summary = f"{config['gwas_pyseer']}/summary/{{antibiotic}}_gwas_summary.tsv",
+    output:
+        plot = f"{config['gwas_pyseer']}/unitigs_results/{{antibiotic}}_effect_bubble.png",
+    conda: 
+        config["conda_r"] 
+    script:
+        config["r_effect_bubble"]
+
+# B. GENERATE PHANDANGO .PLOT FILE
+rule generate_phandango_plot:
+    input:
+        snps = f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp.tsv"
+    output:
+        plot_file = f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_phandango_snp.plot"
+    script:
+        config["gwas_phandango"]
