@@ -1,5 +1,4 @@
 # -- Root Directories --
-prokka_out: "../snakemake_pipeline/output/prokka" ## CHANGE
 pyseer_out: "output/gwas/pyseer"
 gwas_tree: "output/gwas/tree"
 gwas_data: "output/gwas"
@@ -26,6 +25,7 @@ conda_r: "envs/r_env.yml"
 
 #TODO ADD THIS
 # -- Input Parameters --
+prokka_out: "../snakemake_pipeline/output/prokka" ## CHANGE
 ref_fasta: "reference_genome/Ng_ATCC19424.fasta"
 ref_gff: "reference_genome/reference_annotation/ATCC19424.gff"
 phen_table: "genomes_tables/phen_table.tsv"
