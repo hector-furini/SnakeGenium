@@ -10,7 +10,7 @@ import os
 
 configfile: "config.yaml" # Load the configuration file
 
-ref_genome = config["ref_fasta"]  # Path to the reference genome
+ref_genome = config["ref_fna"]  # Path to the reference genome
 ref_gff = config["ref_gff"]
 phen_table = config["phen_table"]  # Path to the samples table
 max_threads = config["max_threads"] ## WRAPPER

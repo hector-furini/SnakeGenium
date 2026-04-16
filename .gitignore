@@ -20,6 +20,9 @@ output/
 
 # Files #
 #########
+config.yaml
+config_backup.yaml
+GWAS_summary.txt
 
 # Generated files #
 ###################
