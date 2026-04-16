@@ -38,6 +38,7 @@ GWAS_summary.txt
 *.tbl
 .*
 *.tsv
+*.sh
 
 # Compiled source #
 ###################
