@@ -3,12 +3,17 @@ from subprocess import run
 import os
 
 def main():
+    '''
+    Main function to parse arguments and run underlying functions to 
+    start the pipeline.
+    '''
     parser = argparse.ArgumentParser(description="Starting GWAS pipeline script.",
                                     epilog="""
                                     This script requires:
                                     1. Annotation files:
                                     Genome '.fna',
                                     Annotated '.gff'.
+                                    Annotated '.gbk'.
                                     2. Phenotypes table '.tsv".
                                     3. Reference Genome annotation:
                                     Reference '.fna' and '.gff'.
@@ -40,6 +45,12 @@ def main():
                         help="Reference genome .gff file path",
                         required=True,
                         metavar="['REF_GFF']")
+
+    parser.add_argument("--ref_gbk",
+                        type=str,
+                        help="Reference genome .gbk file path",
+                        required=True,
+                        metavar="['REF_GBK']")
     
     # OPTINAL ARGUMENT
     parser.add_argument("--max_threads",
@@ -58,17 +69,23 @@ def main():
                         help="Max simultaneos jobs to run. Default: 1")
 
     args = parser.parse_args()
-    writeConfigFile(checkFiles(args))
-    runSnakemake(args.max_threads, args.max_mem, args.jobs)
+    try:
+        writeConfigFile(checkFiles(args))
+        runSnakemake(args.max_threads, args.max_mem, args.jobs)
+    except Exception as e:
+        print(f"ERROR: {e}")
 
-def checkFiles(args):
+def checkFiles(args): 
+    '''
+    Validade files and directories for the pipeline.
+    '''
     for key, value in vars(args).items():
         if key in ["anno"]:
             if not os.path.exists(value):
                 print(f"ERROR: --{key} not a valid dir. Given: {value}")
                 return
-        elif key in ["pheno", "ref_fna", "ref_gff"]:
-            if not os.path.isfile(value) or not value.rsplit(".", 1)[-1] in ["tsv", "fna", "gff"]:
+        elif key in ["pheno", "ref_fna", "ref_gff", "ref_gbk"]:
+            if not os.path.isfile(value) or not value.rsplit(".", 1)[-1] in ["tsv", "fna", "gff", "gbk"]:
                 print(f"ERROR: --{key} not a valid file. Given: {value}")
                 return
         elif key in ["max_threads", "max_mem", "jobs"]:
@@ -79,6 +96,10 @@ def checkFiles(args):
     return args
 
 def writeConfigFile(args):
+    '''
+    Write the configuration file used by the pipeline.
+    Writes a new file each time the pipeline is started.
+    '''
     print("Writing to Config File...")
     with open("config.yaml", "w") as config_file:
         config_file.write(base_config_yaml)
@@ -88,12 +109,16 @@ f"""
 prokka_out: {args.anno}
 ref_fna: {args.ref_fna}
 ref_gff: {args.ref_gff}
+ref_gbk: {args.ref_gbk}
 phen_table: {args.pheno}
 max_threads: {args.max_threads}
 """)
 
 def runSnakemake(threads, mem, jobs):
-
+    '''
+    Responsible for running the snakemake commands inside a run block.
+    Generates a summary and runs the pipeline.
+    '''
     snakemake_summary_run = [f"snakemake", "-s", "gwas_snakefile", "-n", "--cores",
     f"{threads}", "--resources", f"mem_mb={mem}", "--rerun-triggers", "mtime"]
 
@@ -109,12 +134,12 @@ def runSnakemake(threads, mem, jobs):
     run(snakemake_run)
 
 base_config_yaml ="""# -- Root Directories --
-pyseer_out: "output/gwas/pyseer"
-gwas_tree: "output/gwas/tree"
-gwas_data: "output/gwas"
-gwas_snippy: "output/gwas/snippy"
-gwas_unitig: "output/gwas/unitig"
-gwas_pyseer: "output/gwas/pyseer_results"
+pyseer_out: "output/gwas_test_05-05/pyseer"
+gwas_tree: "output/gwas_test_05-05/tree"
+gwas_data: "output/gwas_test_05-05"
+gwas_snippy: "output/gwas_test_05-05/snippy"
+gwas_unitig: "output/gwas_test_05-05/unitig"
+gwas_pyseer: "output/gwas_test_05-05/pyseer_results"
 
 # -- Scripts --
 r_effect_bubble : "scripts/plot_effect_bubble.R"

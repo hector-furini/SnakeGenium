@@ -23,6 +23,7 @@ output/
 config.yaml
 config_backup.yaml
 GWAS_summary.txt
+TODO.txt
 
 # Generated files #
 ###################
