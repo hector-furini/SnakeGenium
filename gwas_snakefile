@@ -1,3 +1,20 @@
+'''
+    Ruleset file for Snakemake
+    Copyright (C) 2026  Hector H. Furini
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+'''
 # =============================
 # IMPORTING LIBRARIES
 # =============================
@@ -301,9 +318,9 @@ rule run_roary:
         -p {threads} \
         -v \
         {input.gffs} &&
-        #WORKAROUND SINCE ROARY HAS A DIRECTORY INCOMPATIBILITY WITH SNAKEMAKE
-        mv "{params.temp_dir}/*" "{params.out_dir}/" &&
-        rm -rfv {params.temp_dir}
+        # WORKAROUND SINCE ROARY HAS A DIRECTORY INCOMPATIBILITY WITH SNAKEMAKE
+        mv "{params.temp_dir}"/* "{params.out_dir}/"
+        rm -rfv "{params.temp_dir}"
         """
 # ============================================================
 # B. RUN PYSEER WITH GENE PRESENCE/ABSENCE DATA

@@ -82,7 +82,8 @@ as we strongly recommend, install using the 'snakemake.yml' file in the 'envs' d
 
 `conda activate snakemake`
 
-6. To run the pipeline, start the script run_gwas.py using the following command. Change parameters and input files as needed:
+6. To run the pipeline, start the script run_gwas.py using the following command. Change parameters and input files as needed.
+**Running the pipeline may overwrite existing files in base directory "./output"**
 
 ```
 python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fna reference_genome.fna --ref_gff reference_genome.gff --ref_gff reference_genome.gbk --max-threads 32 --max-mem 30000(mb) --jobs 1
