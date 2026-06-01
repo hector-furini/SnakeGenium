@@ -1,6 +1,8 @@
 # **SnakeGenium v1.01**
 ## Integrated GWAS Pipeline for Bacteria
 
+* Read the [Latest Changelog](CHANGELOG.md)
+
 ### **Requirements:**
 * #### Linux64 <sub>(Tested, might work on other unix systems)</sub>
 * #### Anaconda environment manager
