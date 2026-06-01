@@ -1,4 +1,5 @@
-# Integrated-GWAS-Pipeline-for-Bacteria
+# **SnakeGenium v1.01**
+## Integrated GWAS Pipeline for Bacteria
 
 ### **Requirements:**
 * #### Linux64 <sub>(Tested, might work on other unix systems)</sub>
@@ -73,8 +74,8 @@ conda config --add channels conda-forge
 ```
 
 4. Clone this repository, and install Snakemake using anaconda package manager. You can install snakemake either from the repositories or,
-as we strongly recommend, install using the 'snakemake.yml' file in the 'envs' directory. This ensures correct versioning for the packages.
-<br>-- Setting conda channel priority for flexible or disabled might be necessary --
+as we strongly recommend, install using the 'snakemake.yml' file in the 'envs' directory. This ensures correct versioning for the packages.<br>
+**-- Setting conda channel priority for flexible or disabled might be necessary --**
 
 `conda env create -f envs/snakemake.yml`
 
@@ -100,11 +101,11 @@ python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fn
 
 ``` --ref_gbk: Reference Genome Annotated .GBK ```
 
-``` --max_threads: Max threads to be used in the analisys ```
+``` --max_threads: Max threads to be used in the analisys. Default: [8]```
 
-``` --max-mem: Max memory in megabytes to be used in the analisys ```
+``` --max-mem: Max memory in megabytes to be used in the analisys. Default: [8000] ```
 
-``` --jobs: Number of simultaneos jobs to be run by the pipeline. ```
+``` --jobs: Number of simultaneos jobs to be run by the pipeline. Default: [1] ```
 
 **ATTENTION:** The first time the pipeline is run will take several minuters at its beginning due to dependencies and packages installation. 
 
@@ -137,6 +138,11 @@ python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fn
             └── fasta_list.txt                                  # Genomes Directory List
 </pre>
 
+## Please Cite
+
+If you have used SnakeGenium for your results, please cite the tool and any other packages and datasets you may have used.
+
+If a reference needs to be updated please let me know!
 
 ## References:
 FastTree v2.1.11: [github.io/fasttree](https://morgannprice.github.io/fasttree/)
@@ -146,3 +152,15 @@ FastTree v2.1.11: [github.io/fasttree](https://morgannprice.github.io/fasttree/)
 <br>Snakemake v9.9.0: [github.io/snakemake](https://github.com/snakemake/snakemake)
 <br>Snippy v4.6.0: [github.io/snippy](https://github.com/tseemann/snippy)
 <br>Unitig-Caller v1.3.0: [github.io/unitig-caller](https://github.com/bacpop/unitig-caller)
+
+## Name Etimology:
+SNAKE - **SNAKE**make/Python origin<br>
+GEN - **GEN**ome Analysis<br>
+IUM - Bacter**IUM**
+
+## License:
+**SnakeGenium** is free software, released under the [GPL (version 3)](https://www.gnu.org/licenses/gpl-3.0).
+
+## Author
+
+Hector H. Furini

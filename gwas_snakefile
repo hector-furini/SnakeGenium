@@ -15,15 +15,8 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '''
-# =============================
-# IMPORTING LIBRARIES
-# =============================
 import pandas as pd
 import os
-
-# =============================
-# CONFIGURATION AND PARSING
-# =============================
 
 configfile: "config.yaml"
 
@@ -33,20 +26,15 @@ ref_gbk = config["ref_gbk"]
 phen_table = config["phen_table"]
 max_threads = config["max_threads"]
 
-# PARSING THE PHENOTYPES TABLE
 
 try:
-    # READ ONLY THE HEADER TO GET ANTIBIOTICS NAMES
     df_head = pd.read_csv(phen_table, nrows=0, sep="\t")
-    id_column = df_head.columns[0] # Get the name of the column - Assuming column 0 is genome IDs
-    antibiotics_col = df_head.columns[1:].tolist() # Get all antibiotics names
+    id_column = df_head.columns[0]
+    antibiotics_col = df_head.columns[1:].tolist()
 
-    # READ GENOME IDs (COLUMN 0)
     df_ids = pd.read_csv(phen_table, usecols=[0], sep="\t")
-    genome_ids = df_ids[id_column].astype(str).tolist() # List of all genome IDs
+    genome_ids = df_ids[id_column].astype(str).tolist()
 
-    # REMOVE THESE ANTIBIOTICS WITHOUT PHENOTYPE (AVOID ERRORS)
-    #antibiotics_remove = ["gentamicin", "cefoxitin", "spectinomycin"]
     antibiotics_remove = []
     antibiotics = [antibiotic for antibiotic in antibiotics_col if antibiotic not in antibiotics_remove]
 
@@ -56,44 +44,27 @@ except FileNotFoundError:
     antibiotics = []
     genome_ids = []
 
-# =============================
-# TARGETS RULES
-# =============================
 rule all:
     input:
-        # -- PHYLOGENY --
-        expand(f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf", gid=genome_ids), # GENOME FILES
-        f"{config["gwas_snippy"]}/core.full.aln", # CORE GENOME ALIGNMENT
-        f"{config["gwas_snippy"]}/core.vcf.gz", # CORE GENOME SNPS
-        f"{config["gwas_tree"]}/core_genome.treefile", # PHYLOGENETIC TREE
-        f"{config["gwas_tree"]}/kinship_matrix", # KINSHIP MATRIX
-        # -- UNITIG GWAS --
-        f"{config["gwas_unitig"]}/unitigs.pyseer.gz", # UNITIGS
+        expand(f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf", gid=genome_ids),
+        f"{config["gwas_snippy"]}/core.full.aln",
+        f"{config["gwas_snippy"]}/core.vcf.gz",
+        f"{config["gwas_tree"]}/core_genome.treefile",
+        f"{config["gwas_tree"]}/kinship_matrix",
+        f"{config["gwas_unitig"]}/unitigs.pyseer.gz",
         expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig.tsv", antibiotic=antibiotics),
-        # -- GENES GWAS --
-        f"{config["gwas_data"]}/roary/gene_presence_absence.Rtab", # GENE PRESENCE
+        f"{config["gwas_data"]}/roary/gene_presence_absence.Rtab",
         expand(f"{config["gwas_pyseer"]}/genes_results/{{antibiotic}}_gene.tsv", antibiotic=antibiotics),
-        # -- SNPs GWAS --
         expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp.tsv", antibiotic=antibiotics),
-
-        # -- POST PROCESSING --
         expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_unitig_significant.tsv", antibiotic=antibiotics),
         expand(f"{config["gwas_pyseer"]}/genes_results/{{antibiotic}}_gene_significant.tsv", antibiotic=antibiotics),
         expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_snp_significant.tsv", antibiotic=antibiotics),
         expand(f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_annotated_genes.tsv", antibiotic=antibiotics),
-
-        # -- PLOTS -- 
         expand(f"{config["gwas_pyseer"]}/{{type}}s_results/{{antibiotic}}_{{type}}_qqplot.png", antibiotic=antibiotics, type=['unitig', 'gene', 'snp']),
         expand(f"{config['gwas_pyseer']}/unitigs_results/{{antibiotic}}_effect_bubble.png", antibiotic=antibiotics),
         expand(f"{config["gwas_pyseer"]}/snps_results/{{antibiotic}}_phandango_snp.plot", antibiotic=antibiotics),
-
-        # -- SUMMARY --
         expand(f"{config["gwas_pyseer"]}/summary/{{antibiotic}}_gwas_summary.tsv", antibiotic=antibiotics),
 
-# =============================
-# PART 1 : PRE-PROCESSING DATA
-# =============================
-# A. CLEAR PHENOTYPES TABLE AND SPLIT PER ANTIBIOTIC
 rule extract_phenotypes:
     '''
     This rule spreads the original phenotypes table into smaller tables and generates a
@@ -121,8 +92,7 @@ rule extract_phenotypes:
 
         #Save a list of valid sample IDs
         subset[id_col_name].to_csv(output.samples, index=False, header=False)
-# ============================================================
-# B. CREATE A LIST OF FILE PATHS FOR UNITIG-CALLER
+
 rule generate_fasta_list:
     '''
     Validades the presence of .fna files and generates a list of these files for usage
@@ -136,16 +106,13 @@ rule generate_fasta_list:
         with open(output.list_file, "w") as outfile:
             for fasta_path in input.fastas:
                 outfile.write(f"{fasta_path}\n")
-# =============================================
-# PART 2 : PHYLOGENY ANALISYS
-# =============================================
-# A. RUN SNIPPY WITH REFERENCE GENOME
+
 rule run_snippy:
     '''
     Run variant calling with snippy for each genome using the reference genome.
     '''
     input:
-        ref = ref_gbk, # CHANGED
+        ref = ref_gbk,
         contigs = f"{config["prokka_out"]}/{{gid}}/{{gid}}.fna"
     output:
         vcf = f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf"
@@ -162,14 +129,13 @@ rule run_snippy:
         --ref {input.ref} \
         --ctgs {input.contigs};
         """
-# ============================================================
-# B. RUN SNIPPY-CORE TO GET THE CORE GENOME ALIGNMENT AND VCF
+
 rule run_snippy_core:
     '''
     Core genome aligmnet using snippy-core and the variants called file.
     '''
     input:
-        ref = ref_gbk, #CHANGED
+        ref = ref_gbk,
         vcfs = expand(f"{config["gwas_snippy"]}/data/{{gid}}/snps.vcf", gid=genome_ids)
     output:
         aln = f"{config["gwas_snippy"]}/core.full.aln",
@@ -187,8 +153,7 @@ rule run_snippy_core:
         bgzip -c core.vcf > {output.vcf} && # Use BGZF (format read by snippy) to compress file
         mv -v core.* "{params.snippy_dir}/"
         """
-# ============================================================
-#C. RUN FASTTREE TO GET A PHYLOGENETIC TREE FROM THE CORE GENOME ALIGNMENT
+
 rule fasttree:
     '''
     Phylogenetic tree built from the core-genome aligment.
@@ -206,8 +171,7 @@ rule fasttree:
         -gtr \
         {input} > {output};
         '''
-# ============================================================
-# D. USE TREE TO CALCULATE KINSHIP MATRIX FOR GWAS
+
 rule calculate_tree_kinship:
     '''
     This rule use the pyseer original script "phylogeny_distance.py" to
@@ -226,10 +190,7 @@ rule calculate_tree_kinship:
         --lmm \
         {input.tree} > {output.kinship};
         """
-# =============================================
-# PART 3 : GWAS - UNITIG
-# =============================================
-# A. CALL UNITIGS WITH UNITIG-CALLER
+
 rule call_unitigs:
     '''
     Call unitigs for the genomes.
@@ -257,8 +218,7 @@ rule call_unitigs:
             rm -v {params.out_dir}.pyseer
         fi
         """
-# ============================================================
-# B. RUN PYSEER WITH UNITIG DATA
+
 rule run_pyseer_unitigs:
     '''
     Run the pyseer analisys for the called unitigs.
@@ -289,10 +249,7 @@ rule run_pyseer_unitigs:
         --output-patterns {params.pattern}.patterns \
         --cpu {threads} > {output.results};
         """
-# =============================================
-# PART 4 : GWAS - GENES
-# =============================================
-# A. GENERATING A GENE MATRIX WITH ROARY
+
 rule run_roary:
     '''
     Generates a gene presence and absence matrix. 
@@ -322,11 +279,11 @@ rule run_roary:
         mv "{params.temp_dir}"/* "{params.out_dir}/"
         rm -rfv "{params.temp_dir}"
         """
-# ============================================================
-# B. RUN PYSEER WITH GENE PRESENCE/ABSENCE DATA
+
 rule run_pyseer_genes:
     '''
     Run pyseer GWAS based on the roary presence and absence matrix.
+    These Parameters can be changed:
         --min-af 0.01 \
         --max-af 0.99 \
     '''
@@ -348,16 +305,11 @@ rule run_pyseer_genes:
         --similarity {input.kinship} \
         --cpu {threads} > {output.results};
         """
-        # Min-af ignores genes that appear in less than 1% of samples (avoid errors)
-        # Max-af ignores genes that appear in more than 99% of samples
-        # Genes present in both R and S phenotypes aren't significant
-# =============================================
-# PART 5 : GWAS - SNPs
-# =============================================
-# A. RUN PYSEER WITH SNP DATA
+
 rule run_pyseer_snps:
     '''
     Run pyseer with the variants called matrix.
+        These Parameters can be changed:
         --min-af 0.01 \
         --max-af 0.99 \
     '''
@@ -379,10 +331,7 @@ rule run_pyseer_snps:
         --similarity {input.kinship} \
         --cpu {threads} > {output.results};
         """
-# =============================================
-# PART 6 : GWAS POST-PROCESSING & FILTERING
-# =============================================
-# A. FILTER SIGNIFICANT HITS
+
 rule filter_significant_hits:
     '''
     Grabs all tables generated by the GWAS and applies a FDR correction
@@ -399,8 +348,7 @@ rule filter_significant_hits:
         config["conda_pyseer"]
     script:
         config["gwas_filter_hits"]
-# ============================================================
-# B. GENERATE QQPLOT
+
 rule plot_qq:
     '''
     Plot the qq graph for the GWAS.
@@ -421,10 +369,7 @@ rule plot_qq:
             touch {output.plot}
             }};
         """
-# =============================================
-# PART 7 : MAPPING SIGNIFICANT GENES
-# =============================================
-# A. EXTRACT SIGNIFICANT UNITIGS SEQUENCES
+
 rule extract_sig_unitigs_fasta:
     '''
     Writes a file with the sequences of all significant unitigs found in the GWAS.
@@ -437,16 +382,14 @@ rule extract_sig_unitigs_fasta:
         import pandas as pd
 
         df = pd.read_csv(input.significant, sep="\t")
-        # Variant column contain sequences
+
         if "variant" in df.columns and not df.empty:
             with open(output.fasta, "w") as f:
                 for idx, row in df.iterrows():
-                    # Use a short, SAM-safe ID based on the dataframe index
                     f.write(f">unitig_{idx}\n{row['variant']}\n")
         else:
-            open(output.fasta, "a").close() # Opens and closes a blank file to not fail the rule
-# ============================================================
-# B. INDEXING THE SEQUENCES POSITION
+            open(output.fasta, "a").close()
+
 rule bwa_index_ref:
     '''
     Uses bwa to index the reference genome into a bwt file.
@@ -461,8 +404,7 @@ rule bwa_index_ref:
         """
         bwa index {input.ref}
         """
-# ============================================================
-# C. ALIGN SEQUENCES TO REFERENCE
+
 rule map_unitigs_to_ref:
     '''
     Map the unitigs sequences to the reference genome bwt file using samtools.
@@ -471,7 +413,6 @@ rule map_unitigs_to_ref:
     input:
         fasta = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_sig_unitigs.fasta",
         ref = ref_genome,
-        # bwa me uses indexing file in ref_genome directory
         idx = f"{ref_genome}.bwt"
     output:
         bam = f"{config["gwas_pyseer"]}/unitigs_results/{{antibiotic}}_mapped_unitigs.bam"
@@ -480,7 +421,6 @@ rule map_unitigs_to_ref:
     threads: max_threads
     shell:
         """
-        # Check for empty file
         if [ ! -s {input.fasta} ]; then
             touch {output.bam}
         else
@@ -488,8 +428,7 @@ rule map_unitigs_to_ref:
             samtools view -Sb - | samtools sort -o {output.bam} -
         fi
         """
-# ============================================================
-# D. ANNOTATE SIGNIFICANT UNITIGS
+
 rule annotate_mapped_unitigs:
     '''
     Reannotates the bam file using the reference genome gff file.    
@@ -503,25 +442,20 @@ rule annotate_mapped_unitigs:
         config["conda_pyseer"] 
     shell:
         """
-        # Check if BAM file actually has contents 
         if [ -s {input.bam} ]; then
 
-            # Safely count only the mapped reads (-F 4 ignores unmapped reads)
             mapped_count=$(samtools view -c -F 4 {input.bam})
             
-            # If the count is greater than 0, proceed with annotation
             if [ "$mapped_count" -gt 0 ]; then
                 sed '/^##FASTA/,$d' {input.gff} | bedtools intersect -a stdin -b {input.bam} -wa -wb > {output.annotated}
             else
                 touch {output.annotated} 
             fi
         else
-            # If BAM file was 0 bytes
             touch {output.annotated}
         fi
         """
-# ============================================================
-# E. EXTRACT SNPS POSITIONS
+
 rule extract_sig_snps_bed:
     '''
     Gets the position of all significant snps and stores in a bed file.
@@ -533,22 +467,21 @@ rule extract_sig_snps_bed:
     run:
         import pandas as pd
         df = pd.read_csv(input.significant, sep="\t")
-        if "variant" in df.columns and not df.empty: # Ensures columns and not empty df
+        if "variant" in df.columns and not df.empty:
             with open(output.bed, "w") as f:
                 for var in df["variant"]:
                     parts = str(var).rsplit("_", 3)
                     if len(parts) == 4:
-                        chrom, pos_str = parts[0], parts[1] # Gets chrom and position
+                        chrom, pos_str = parts[0], parts[1]
                         try:
-                            pos = int(pos_str) # pos need to be a int to be used to locate the gene
+                            pos = int(pos_str)
                             f.write(f"{chrom}\t{pos-1}\t{pos}\t{var}\n")
-                        except ValueError as e: # If str cannot be parsed to int
+                        except ValueError as e:
                             print(e)
                             pass
         else:
-            open(output.bed, "a").close() # Writes empty file
+            open(output.bed, "a").close()
 
-# F. ANNOTATE SNPS POSITIONS TO GENES
 rule annotate_mapped_snps:
     '''
     Uses the bed file of positions to try annotate genes based on the reference
@@ -569,9 +502,7 @@ rule annotate_mapped_snps:
             touch {output.annotated}
         fi
         """
-# ============================================================
-# PART 8 : SUMMARY TSV WITH BEDTOOLS ANNOTATIONS
-# ============================================================
+
 rule summarize_gwas_results_tsv:
     '''
     Summarize all the results into one single table with all the annotations
@@ -589,10 +520,7 @@ rule summarize_gwas_results_tsv:
     script:
         config["gwas_summarize"]
 
-# =============================================
-# PART 9. GENERATING PLOTS
-# =============================================
-# A. PLOT UNITIG EFFECT SIZES PER GENE
+
 rule plot_unitig_effect_bubble:
     '''
     Plots the phenotype population effects for each unitig.
@@ -606,7 +534,6 @@ rule plot_unitig_effect_bubble:
     script:
         config["r_effect_bubble"]
 
-# B. GENERATE PHANDANGO .PLOT FILE
 rule generate_phandango_plot:
     '''
     Generates a phandango plot to visualize SNPs using the

@@ -1,7 +1,10 @@
 #!/usr/bin/env python
-# Copyright 2017 Marco Galardini and John Lees
 
-'''Extract a distance matrix from a phylogeny'''
+'''
+    Extract a distance matrix from a phylogeny  
+    Copyright 2017 Marco Galardini and John Lees  
+    "https://github.com/mgalardini/pyseer/blob/master/scripts/phylogeny_distance.py"
+'''
 
 
 def get_options():

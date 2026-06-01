@@ -2,6 +2,8 @@
 
 ## 1.0.1 (2026-05-06)
 
+- Merged adding-gbk-suport to main
+
 Fix:
 
   - Downgraded version of click dependency in snakemake.yml due to lack of repository availability that made it impossible to make new installations: <br>
@@ -13,6 +15,7 @@ Features:
   - Added a `--ref_gbk`flag for indicating reference genome annotated genome path in the `run_gwas.py`wrapper.
   - Added this `CHANGELOG.md`file to auxiliate tracking of versioning. 
   - Added repository LICENSE file and copyrights to files.
+  - Added comments in the begining of functions and scripts.
 
 Changes:
 
@@ -23,6 +26,7 @@ Changes:
 Removed:
 
   - Removed `testing_filter_hits.ipynb` file used for debugging the scripts. 
+  - Removed # comments from most files.
 
 ## 1.0.1 (2026-04-16)
 
