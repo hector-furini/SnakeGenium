@@ -1,6 +1,8 @@
-# Copyright 2017 Marco Galardini and John Lees
-
-'''Draw a qq-plot'''
+'''
+    Draw a qq-plot
+    Copyright 2017 Marco Galardini and John Lees
+    "https://github.com/mgalardini/pyseer/blob/master/scripts/qq_plot.py"
+'''
 
 
 def get_options():

@@ -1,7 +1,10 @@
 #!/usr/bin/env python
-# Copyright 2017 Marco Galardini and John Lees
+'''
+    Count unique patterns
+    Copyright 2017 Marco Galardini and John Lees
+    "https://github.com/mgalardini/pyseer/blob/master/scripts/count_patterns.py"
+'''
 
-'''Count unique patterns'''
 
 mem_adjust = 10
 
