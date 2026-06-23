@@ -152,12 +152,12 @@ def runSnakemake(threads, mem, jobs):
     run(snakemake_run)
 
 base_config_yaml ="""# -- Root Directories --
-pyseer_out: "output/gwas_test_05-05/pyseer"
-gwas_tree: "output/gwas_test_05-05/tree"
-gwas_data: "output/gwas_test_05-05"
-gwas_snippy: "output/gwas_test_05-05/snippy"
-gwas_unitig: "output/gwas_test_05-05/unitig"
-gwas_pyseer: "output/gwas_test_05-05/pyseer_results"
+pyseer_out: "output/gwas/pyseer"
+gwas_tree: "output/gwas/tree"
+gwas_data: "output/gwas"
+gwas_snippy: "output/gwas/snippy"
+gwas_unitig: "output/gwas/unitig"
+gwas_pyseer: "output/gwas/pyseer_results"
 
 # -- Scripts --
 r_effect_bubble : "scripts/plot_effect_bubble.R"

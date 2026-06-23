@@ -1,5 +1,12 @@
 # CHANGELOG.md
 
+## 1.0.2 (2026-06-23)
+
+Fix: 
+
+  - Fixed typing errors in README.md file.
+  - Fixed output directory typing error in python file.
+
 ## 1.0.1 (2026-05-06)
 
 - Merged adding-gbk-suport to main

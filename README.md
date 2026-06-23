@@ -10,6 +10,14 @@
 * #### Annotated genome files ".fna", ".gff" and ".gbk" for both reference genome and target genomes
 
 ---
+## This pipeline RUNs three distinct and parallel GWAS analyses:
+
+- (1) The <strong>SNP GWAS</strong> (from the core.vcf file) precision-hunts for point mutations in universally conserved core genes.
+- (2) The <strong>GENE GWAS</strong> (from Roary Gene Presence/Abscence .Rtab) catches the acquired accessory genome, identifying when the presence of an entire gene (like a beta-lactamase) drives the phenotype.
+- (3) The <strong>UNITIG GWAS</strong> (from unitig-caller) acts as the ultimate catch-all, breaking free from the reference genome entirely to find sequence signatures (k-mers) spanning core mutations, accessory genes, and structural variations.
+
+
+---
 ## About the Phenotypes Table:
 
 Mandatory phenotypes table separated by tabulation (.tsv) <ins>__must__</ins> follow this organization:
@@ -89,7 +97,7 @@ as we strongly recommend, install using the 'snakemake.yml' file in the 'envs' d
 **Running the pipeline may overwrite existing files in base directory "./output"**
 
 ```
-python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fna reference_genome.fna --ref_gff reference_genome.gff --ref_gff reference_genome.gbk --max-threads 32 --max-mem 30000(mb) --jobs 1
+python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fna reference_genome.fna --ref_gff reference_genome.gff --ref_gff reference_genome.gbk --max-threads 32 --max_mem 30000(mb) --jobs 1
 ```
 
 #### Arguments description:
@@ -103,9 +111,9 @@ python run_gwas.py --anno /annotations_directory --pheno phenotypes.tsv --ref_fn
 
 ``` --ref_gbk: Reference Genome Annotated .GBK ```
 
-``` --max_threads: Max threads to be used in the analisys. Default: [8]```
+``` --max_threads: Max threads to be used in the analyses. Default: [8]```
 
-``` --max-mem: Max memory in megabytes to be used in the analisys. Default: [8000] ```
+``` --max_mem: Max memory in megabytes to be used in the analyses. Default: [8000] ```
 
 ``` --jobs: Number of simultaneos jobs to be run by the pipeline. Default: [1] ```
 
